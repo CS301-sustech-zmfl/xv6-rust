@@ -1,3 +1,10 @@
+use core::ptr::{ copy_nonoverlapping, NonNull };
+use core::mem::size_of;
+
+use crate::fs;
+use crate::define::fs::ROOTDEV;
+use crate::interrupt::trap::usertrap_ret;
+
 mod process;
 pub mod cpu;
 mod context;
@@ -11,11 +18,7 @@ pub use process::*;
 pub use scheduler::*;
 pub use elf::*;
 
-use core::ptr::{ copy_nonoverlapping, NonNull };
-use core::mem::size_of;
-
-
-static initcode:[u8; 52] = [
+static INITCODE: [u8; 52] = [
     0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x45, 0x02,
     0x97, 0x05, 0x00, 0x00, 0x93, 0x85, 0x35, 0x02,
     0x93, 0x08, 0x70, 0x00, 0x73, 0x00, 0x00, 0x00,
@@ -39,16 +42,24 @@ pub unsafe fn fork() -> isize {
 
         // Copy user memory from parent to child
 
-        extern_data.pagetable.as_mut().unwrap().uvmcopy(
+        match extern_data.pagetable.as_mut().unwrap().uvmcopy(
             other_extern_data.pagetable.as_mut().unwrap(),
             extern_data.size
-        );
+        ) {
+            Ok(_) => {
+                println!("Success to copy data from user");
+            }
+
+            Err(err) => {
+                panic!("fork(): -> uvmcopy(): fail to copy data from user\nerr: {}", err);
+            }
+        }
 
         // Copy saved user register;
         copy_nonoverlapping(
             extern_data.trapframe, 
             other_extern_data.trapframe, 
-            size_of::<Trapframe>()
+            1
         );
 
         // Cause fork to return 0 in the child
@@ -78,7 +89,21 @@ pub unsafe fn fork() -> isize {
     -1
 }
 
+/// A fork child's very first scheduling by scheduler()
+/// will swtch to forkret.
+/// 
+/// Need to be handled carefully, because CPU use ra to jump here
+unsafe fn forkret() -> ! {
+    static mut FIRST: bool = true;
+    
+    // Still holding p->lock from scheduler
+    CPU_MANAGER.myproc().unwrap().data.release();
+    
+    if FIRST {
+        // File system initialization
+        FIRST = false;
+        fs::init(ROOTDEV);
+    }
 
-
-
-
+    usertrap_ret();
+}

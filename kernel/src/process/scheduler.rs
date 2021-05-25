@@ -4,7 +4,7 @@ use core::ops::{ DerefMut };
 use super::*;
 use crate::define::{
     param::NPROC,
-    memlayout::{ KSTACK, PGSIZE, TRAMPOLINE }
+    memlayout::{ PGSIZE, TRAMPOLINE }
 };
 use crate::lock::spinlock::{ Spinlock, SpinlockGuard };
 use crate::register::sstatus::intr_on;
@@ -44,7 +44,7 @@ impl ProcManager{
 
     // initialize the proc table at boot time.
     // Only used in boot.
-    pub unsafe fn procinit(&mut self){
+    pub unsafe fn proc_init(&mut self){
         println!("procinit......");
         for (pos, p) in self.proc.iter_mut().enumerate() {
             p.extern_data.get_mut().set_kstack(kstack(pos));
@@ -58,7 +58,7 @@ impl ProcManager{
     // group page
     pub unsafe fn proc_mapstacks(&mut self) {
         for (pos, _) in self.proc.iter_mut().enumerate() {
-            let pa = kalloc().expect("Fail to allocate physical page.");
+            let pa = RawPage::new_zeroed() as *mut u8;
             let va = kstack(pos);
 
             KERNEL_PAGETABLE.kvmmap(
@@ -72,7 +72,7 @@ impl ProcManager{
     }
 
     // Set up first user programe
-    pub unsafe fn userinit(&mut self) {
+    pub unsafe fn user_init(&mut self) {
         println!("first user process init......");
         let p = self.allocproc().expect("Fail to get unused process");
 
@@ -80,8 +80,8 @@ impl ProcManager{
         // and data into it.
         let extern_data = p.extern_data.get_mut();
         extern_data.pagetable.as_mut().unwrap().uvminit(
-            &initcode,
-            size_of_val(&initcode)
+            &INITCODE,
+            size_of_val(&INITCODE)
         );
 
         extern_data.size = PGSIZE;
@@ -116,38 +116,30 @@ impl ProcManager{
 
                 let extern_data = p.extern_data.get_mut();
                 // Allocate a trapframe page.
-                match unsafe { kalloc() } {
-                    Some(ptr) => {
-                        extern_data.set_trapframe(ptr as *mut Trapframe);
+                let ptr = unsafe{ RawPage::new_zeroed() as *mut u8 };
 
-                        // An empty user page table
-                        if let Some(page_table) = unsafe { extern_data.proc_pagetable() } {
-                           extern_data.set_pagetable(Some(page_table));
-                            
+                extern_data.set_trapframe(ptr as *mut Trapframe);
 
-                            // Set up new context to start executing at forkret, 
-                            // which returns to user space. 
-                            let kstack = extern_data.kstack;
-                            extern_data.context.write_zero();
-                            // guard.context.write_ra(forkret as usize);
-                            extern_data.context.write_sp(kstack + PGSIZE);
-                            drop(guard);
-                            return Some(p);
-                            // return Some(guard)
-                            
-                        } else {
-                            // p.freeproc();
-                            drop(guard);
-                            return None
-                        }
-                    }
+                // An empty user page table
+                if let Some(page_table) = unsafe { extern_data.proc_pagetable() } {
+                    extern_data.set_pagetable(Some(page_table));
+                    
 
-                    None => {
-                        // p.freeproc();
-                        drop(guard);
-                        // return None
-                    }
+                    // Set up new context to start executing at forkret, 
+                    // which returns to user space. 
+                    let kstack = extern_data.kstack;
+                    extern_data.context.write_zero();
+                    extern_data.context.write_ra(forkret as usize);
+                    extern_data.context.write_sp(kstack + PGSIZE);
+                    drop(guard);
+                    return Some(p);
+                    
+                } else {
+                    // p.freeproc();
+                    drop(guard);
+                    return None
                 }
+
             
             }else {
                 drop(guard);

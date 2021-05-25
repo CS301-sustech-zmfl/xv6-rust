@@ -1,7 +1,6 @@
 #![no_std]
 #![feature(llvm_asm)]
 #![feature(const_fn)]
-#![feature(const_in_array_repeat_expressions)]
 #![feature(global_asm)]
 #![feature(ptr_internals)]
 #![allow(dead_code)]
@@ -11,12 +10,17 @@
 #![allow(unused_imports)]
 #![feature(const_option)]
 #![feature(const_fn_union)]
+#![feature(alloc_error_handler)]
+#![feature(new_uninit)]
 
 
 
 #[macro_use]
 extern crate bitflags;
 extern crate lazy_static;
+
+// use buddy system allocator
+extern crate alloc;
 
 global_asm!(include_str!("asm/entry.S"));
 global_asm!(include_str!("asm/kernelvec.S"));
@@ -41,6 +45,8 @@ mod interrupt;
 mod memory;
 mod syscall;
 mod fs;
+mod driver;
+mod net;
 
 
 

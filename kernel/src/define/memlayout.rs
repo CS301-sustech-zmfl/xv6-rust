@@ -45,6 +45,18 @@ pub const PLIC_SPRIORITY:Address = PLIC.add_addr(0x201000);
 pub const PLIC_MCLAIM:Address = PLIC.add_addr(0x200004);
 pub const PLIC_SCLAIM:Address = PLIC.add_addr(0x201004);
 
+
+// we'll place the e1000 registers at this address.
+// vm.c maps this range.
+pub const E1000_REGS:usize = 0x40000000;
+
+// qemu -machine virt puts PCIe config space here.
+// vm.c maps this range.
+pub const ECAM:usize = 0x30000000;
+
+// define in hw/riscv/virt.c, which is used to execute shutdown. 
+pub const VIRT_TEST:usize = 0x100000;
+
 pub fn plic_spriority(hartid:usize) -> usize{
     let ret:usize;
     ret = Into::<usize>::into(PLIC_SPRIORITY.add_addr(hartid*0x2000));
@@ -117,13 +129,6 @@ pub const MAXVA:usize =  1 << (9 + 9 + 9 + 12 - 1);
 pub const TRAMPOLINE:usize = MAXVA - PGSIZE;
 
 
-// map kernel stacks beneath the trampoline,
-// each surrounded by invalid guard pages.
-#[inline]
-pub fn KSTACK(addr: usize) -> usize{
-    TRAMPOLINE - (addr + 1)*2*PGSIZE 
-}
-
 // User memory layout.
 // Address zero first:
 //   text
@@ -135,3 +140,6 @@ pub fn KSTACK(addr: usize) -> usize{
 //   TRAMPOLINE (the same page as in the kernel)
 
 pub const TRAPFRAME:usize = TRAMPOLINE - PGSIZE;
+
+
+

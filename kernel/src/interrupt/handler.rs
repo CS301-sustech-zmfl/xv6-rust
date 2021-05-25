@@ -14,9 +14,6 @@ pub fn kernel_syscall(
     _: usize, 
     which: usize
 ) {
-    unsafe{
-        satp::write(0);
-    }
     match which  {
         SHUTDOWN => {
             println!("\x1b[1;31mShutdown!\x1b[0m");
@@ -47,6 +44,10 @@ pub fn supervisor_external() {
     drop(uart);
 }
 
+pub fn instr_handler(sepc: usize) {
+    panic!("Instruction Fault occuer in 0x{:x}", sepc);
+}
+
 // lazy allocate memory when user call sys_sbrk
 // we add the size of user process but not allocate
 // memory, so it'll generate a page fault when user
@@ -62,18 +63,16 @@ pub unsafe fn lazy_allocate(stval: usize) {
     let extern_data = CPU_MANAGER.myproc().unwrap().extern_data.get_mut();
     let page_table = extern_data.pagetable.as_mut().unwrap();
 
-    if let Some(mm) = kalloc() {
-        write_bytes(mm, 0, PGSIZE);
-        let pa = PhysicalAddress::new(mm as usize);
-        if !page_table.mappages(
-            va,
-            pa,
-            PGSIZE,
-            PteFlags::W | PteFlags::R | PteFlags::X | PteFlags::U
-        ) {
-            panic!("lazy_allocate(): fail to allocate physical address for invalid virtual address");
-        }
+    let mm = RawPage::new_zeroed() as *mut u8;
+    write_bytes(mm, 0, PGSIZE);
+    let pa = PhysicalAddress::new(mm as usize);
 
-        kfree(pa);
+    if !page_table.mappages(
+        va,
+        pa,
+        PGSIZE,
+        PteFlags::W | PteFlags::R | PteFlags::X | PteFlags::U
+    ) {
+        panic!("lazy_allocate(): fail to allocate physical address for invalid virtual address.");
     }
 }

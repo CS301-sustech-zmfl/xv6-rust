@@ -1,15 +1,17 @@
 mod sysproc;
+mod sysnet;
 pub use sysproc::*;
+pub use sysnet::*;
 
-use crate::process::*;
+use crate::{println, process::*};
 
 use core::mem::size_of;
 
-type syscall_fn = fn() -> isize;
+type SyscallFn = fn() -> isize;
 
 pub const SYSCALL_NUM:usize = 1;
 
-pub static SYSCALL:[syscall_fn; SYSCALL_NUM] = [
+pub static SYSCALL:[SyscallFn; SYSCALL_NUM] = [
     sys_fork
 ];
 
@@ -24,12 +26,11 @@ pub fn fetchaddr(addr: usize, arg: *mut u8, len: usize) -> Result<(), &'static s
     }
 
     let pg = extern_data.pagetable.as_mut().unwrap();
-    
-    let is_ok = pg.copy_in(arg, addr, len);
 
-    if !is_ok {
-        return Err("Fail copy data from pagetable!");
+    if pg.copy_in(arg, addr, len).is_err() {
+        return Err("Fail copy data from pagetable!")
     }
+    
     
     Ok(())
 }
@@ -43,29 +44,17 @@ pub fn argraw(id: usize) -> usize {
     };
 
     match id {
-        0 => {
-            tf.a0
-        }
+        0 => { tf.a0 }
 
-        1 => {
-            tf.a1
-        }
+        1 => { tf.a1 }
 
-        2 => {
-            tf.a2
-        }
+        2 => { tf.a2 }
 
-        3 => {
-            tf.a3
-        }
+        3 => { tf.a3 }
 
-        4 => {
-            tf.a4
-        }
+        4 => { tf.a4 }
 
-        5 => {
-            tf.a5
-        }
+        5 => { tf.a5 }
 
         _ => {
             panic!("argraw(): cannot get arguments out of limit!");
@@ -94,6 +83,7 @@ pub unsafe fn syscall() {
         let pid = guard.pid;
         drop(guard);
         println!("{} {}: Unknown syscall {}", pid, extern_data.name, id);
+        // use max usize mean syscall failure
         tf.a0 = 2^64-1;
     }
 }

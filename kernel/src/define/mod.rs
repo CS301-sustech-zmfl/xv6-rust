@@ -5,7 +5,8 @@ use crate::memory::address::Addr;
 pub mod memlayout;
 pub mod param;
 pub mod virtio;
-
+pub mod fs;
+pub mod e1000;
 
 #[repr(C)]
 #[derive(Copy, Clone, Eq, PartialEq)]

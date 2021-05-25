@@ -11,12 +11,12 @@ use super::*;
 
 static mut TICKSLOCK:Spinlock<usize> = Spinlock::new(0, "time");
 
-pub fn trapinit(){
+pub fn trap_init(){
     println!("trap init......");
 }
 
 // set up to take exceptions and traps while in the kernel.
-pub unsafe fn trapinithart() {
+pub unsafe fn trap_init_hart() {
     println!("trap init hart......");
     extern "C" {
         fn kernelvec();
@@ -93,7 +93,7 @@ pub unsafe fn usertrap() {
 //
 
 #[no_mangle]
-unsafe fn usertrap_ret() {
+pub unsafe fn usertrap_ret() -> ! {
     extern "C" {
         fn uservec();
         fn trampoline();
@@ -161,6 +161,7 @@ pub unsafe fn kerneltrap(
     let mut sepc = sepc::read();
     let sstatus = sstatus::read();
     let scause = scause::read();
+    // let stval = stval::read();
 
     // if !sstatus::is_from_supervisor() {
     //     panic!("kerneltrap: not from supervisor mode");
@@ -176,9 +177,6 @@ pub unsafe fn kerneltrap(
         0 => {
             // modify sepc to countine running after restoring context
             sepc += 2;
-
-            // debug
-            // println!("sepc=0x{:x} stval=0x{:x}", sepc::read(), stval::read());
             
             let scause = Scause::new(scause);
             match scause.cause(){
@@ -186,13 +184,13 @@ pub unsafe fn kerneltrap(
 
                 Trap::Exception(Exception::LoadFault) => panic!("Load Fault!"),
 
-                // Trap::Exception(Exception::UserEnvCall) => panic!("User System Call!"),
-
                 Trap::Exception(Exception::LoadPageFault) => panic!("Load Page Fault!"),
 
                 Trap::Exception(Exception::StorePageFault) => panic!("Store Page Fault!"),
 
                 Trap::Exception(Exception::KernelEnvCall) => kernel_syscall(arg0, arg1, arg2, which),
+
+                Trap::Exception(Exception::InstructionFault) => instr_handler(sepc),
 
                 _ => panic!("Unresolved Trap! scause:{:?}", scause.cause())
             }
@@ -206,9 +204,7 @@ pub unsafe fn kerneltrap(
         }
 
         2 => {
-            // println!("Timer Interrupt!");
             CPU_MANAGER.yield_proc();
-
         }
 
         _ => {
